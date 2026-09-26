@@ -1,10 +1,13 @@
+import { useAppContext } from '@/contexts/AppContext';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { recordMortality } from '../../database/mortalityQueries';
 import { getAllBatches } from '../../database/batchQueries';
+import { getMortalityByBatch, recordMortality } from '../../database/mortalityQueries';
+import { getSalesDetailsByBatch } from '../../database/salesQueries';
 
 export default function AddMortality() {
+  const { triggerRefresh } = useAppContext();
   const { batchId } = useLocalSearchParams();
   const [batches, setBatches] = useState([]);
   const [formData, setFormData] = useState({
@@ -29,14 +32,32 @@ export default function AddMortality() {
       return;
     }
 
+    const quantity = Number(formData.quantity);
+    const batch = batches.find(item => item.id.toString() === formData.batchId);
+    if (!Number.isInteger(quantity) || quantity <= 0 || !batch) {
+      Alert.alert('Error', 'Enter a positive whole number of deaths and select a valid batch');
+      return;
+    }
+
+    const existingMortality = getMortalityByBatch(batch.id);
+    const soldBirds = getSalesDetailsByBatch(batch.id)
+      .filter(sale => sale.saleType === 'per_bird')
+      .reduce((sum, sale) => sum + sale.quantity, 0);
+    const availableBirds = batch.initialChicks - existingMortality - soldBirds;
+    if (quantity > availableBirds) {
+      Alert.alert('Error', `Only ${Math.max(availableBirds, 0)} birds are available to record as mortality`);
+      return;
+    }
+
     try {
       recordMortality({
         batchId: Number(formData.batchId),
-        quantity: Number(formData.quantity),
+        quantity,
         date: formData.date,
         reason: formData.reason || 'Not specified'
       });
 
+      triggerRefresh();
       Alert.alert('Success', 'Mortality recorded successfully!', [
         { text: 'OK', onPress: () => router.back() }
       ]);

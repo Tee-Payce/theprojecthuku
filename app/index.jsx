@@ -2,12 +2,13 @@ import { useAppContext } from '@/contexts/AppContext';
 import { getAllBatches } from '@/database/batchQueries';
 import { getBatchProgress } from '@/database/progressUtils';
 import { getTotalRevenue } from '@/database/salesQueries';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 export default function Dashboard() {
-  const { refreshTrigger } = useAppContext();
+  const { refreshTrigger, activeProject, setActiveProject, syncStatus, syncNow } = useAppContext();
   const [stats, setStats] = useState({
     totalBatches: 0,
     activeBatches: 0,
@@ -64,10 +65,34 @@ export default function Dashboard() {
 
   return (
     <ScrollView style={{ flex: 1, padding: 16, marginBottom:45, paddingBottom:12 }}>
-      <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', fontFamily: 'arial', color: '#17532dff' }}>
-       
-        The Project Huku 🐔
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+        <TouchableOpacity
+          accessibilityLabel="Back to projects"
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={() => {
+            setActiveProject(null);
+            router.replace('/projects');
+          }}
+          style={{ padding: 6 }}
+        >
+          <Ionicons name="arrow-back" size={24} color="#17532d" />
+        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center', marginRight: 36 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', textAlign: 'center', fontFamily: 'arial', color: '#17532dff' }}>
+            {activeProject?.name || 'The Project Huku 🐔'}
+          </Text>
+          {activeProject?.name && (
+            <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 2 }}>Project dashboard</Text>
+          )}
+        </View>
+      </View>
+
+      <TouchableOpacity onPress={syncNow} style={{ backgroundColor: '#ecfdf5', padding: 10, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#bbf7d0' }}>
+        <Text style={{ color: '#166534', textAlign: 'center', fontWeight: '600' }}>
+          {syncStatus.status === 'syncing' ? 'Syncing...' : syncStatus.pendingCount > 0 ? `${syncStatus.pendingCount} changes pending - Sync now` : 'Synced - Sync now'}
+        </Text>
+      </TouchableOpacity>
 
       {/* Stats Cards */}
       <View style={{ flexDirection: 'row', marginBottom: 20 }}>

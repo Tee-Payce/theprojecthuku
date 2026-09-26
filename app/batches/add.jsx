@@ -1,10 +1,11 @@
+import { useAppContext } from '@/contexts/AppContext';
+import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { router } from 'expo-router';
 import { createBatch } from '../../database/batchQueries';
-import { useAppContext } from '@/contexts/AppContext';
 
-const InputField = React.memo(({ label, value, onChangeText, placeholder, keyboardType = 'default', required = false }) => (
+const InputField = React.memo(function InputField({ label, value, onChangeText, placeholder, keyboardType = 'default', required = false }) {
+  return (
   <View style={{ marginBottom: 16 }}>
     <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#374151' }}>
       {label} {required && <Text style={{ color: '#dc2626' }}>*</Text>}
@@ -24,7 +25,8 @@ const InputField = React.memo(({ label, value, onChangeText, placeholder, keyboa
       keyboardType={keyboardType}
     />
   </View>
-));
+  );
+});
 
 export default function AddBatch() {
   const { triggerRefresh } = useAppContext();
@@ -40,12 +42,19 @@ export default function AddBatch() {
       return;
     }
 
+    const chickCount = Number(initialChicks);
+    const pricePerChick = Number(chickPrice);
+    if (!Number.isInteger(chickCount) || chickCount <= 0 || pricePerChick <= 0) {
+      Alert.alert('Error', 'Enter a positive whole number of chicks and a positive chick price');
+      return;
+    }
+
     try {
       createBatch({
         name,
         startDate: new Date().toISOString().split('T')[0],
-        initialChicks: Number(initialChicks),
-        chickPrice: Number(chickPrice),
+        initialChicks: chickCount,
+        chickPrice: pricePerChick,
         expectedPricePerBird: Number(expectedPricePerBird) || 8,
         expectedPricePerKg: Number(expectedPricePerKg) || 5
       });

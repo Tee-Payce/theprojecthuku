@@ -1,8 +1,8 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { getSalesWithClientInfo, getTotalRevenue } from '../../database/salesQueries';
-import { getAllBatches } from '../../database/batchQueries';
 
 export default function Sales() {
   const [sales, setSales] = useState([]);
@@ -12,9 +12,9 @@ export default function Sales() {
     avgSaleValue: 0
   });
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     loadSales();
-  }, []);
+  }, []));
 
   const loadSales = () => {
     const salesData = getSalesWithClientInfo();

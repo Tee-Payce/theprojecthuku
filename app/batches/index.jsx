@@ -1,17 +1,18 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { getAllBatches } from '../../database/batchQueries';
-import { getSalesByBatch } from '../../database/salesQueries';
 import { getMortalityByBatch } from '../../database/mortalityQueries';
 import { getBatchProgress } from '../../database/progressUtils';
+import { getSalesByBatch } from '../../database/salesQueries';
 
 export default function Batches() {
   const [batches, setBatches] = useState([]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load();
-  }, []);
+  }, []));
 
   const load = () => {
     const batchData = getAllBatches();

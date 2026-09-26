@@ -4,7 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import AuthGate from '@/components/AuthGate';
 import { AppProvider } from '@/contexts/AppContext';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { initDatabase } from '@/database/init';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -21,10 +23,15 @@ export default function RootLayout() {
   
 
   return (
-    <AppProvider>
-      <ThemeProvider value={colorScheme === 'light' ? DarkTheme : DefaultTheme}>
+    <AuthProvider>
+      <AppProvider>
+        <AuthGate>
+          <ThemeProvider value={colorScheme === 'light' ? DarkTheme : DefaultTheme}>
         <Stack>
-         
+          <Stack.Screen name="auth" options={{ headerShown: false }} />
+          <Stack.Screen name="invite" options={{ headerShown: false }} />
+          <Stack.Screen name="projects" options={{ headerShown: false }} />
+          <Stack.Screen name="projects/members" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="index" options={{ 
             title: 'Dashboard',
@@ -99,7 +106,9 @@ export default function RootLayout() {
             }} />
         </Stack>
         <StatusBar style="auto" />
-      </ThemeProvider>
-    </AppProvider>
+          </ThemeProvider>
+        </AuthGate>
+      </AppProvider>
+    </AuthProvider>
   );
 }

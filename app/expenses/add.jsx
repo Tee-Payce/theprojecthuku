@@ -37,9 +37,15 @@ export default function AddExpenseScreen() {
 
   const handleSubmit = () => {
     const itemName = selectedCategory === 'Other' ? customItem : selectedCategory;
+    const parsedAmount = Number(amount);
     
     if (!itemName || !amount || !selectedBatchId) {
       Alert.alert('Error', 'Please fill in item name, amount, and select a batch');
+      return;
+    }
+
+    if (parsedAmount <= 0) {
+      Alert.alert('Error', 'Expense amount must be greater than zero');
       return;
     }
 
@@ -47,7 +53,7 @@ export default function AddExpenseScreen() {
       parseInt(selectedBatchId),
       itemName,
       selectedCategory,
-      parseFloat(amount),
+      parsedAmount,
       new Date().toISOString().split('T')[0],
       notes
     );
@@ -80,18 +86,18 @@ export default function AddExpenseScreen() {
                 <TouchableOpacity
                   key={batch.id}
                   style={{
-                    backgroundColor: selectedBatchId == batch.id ? '#16a34a' : 'white',
+                    backgroundColor: selectedBatchId === batch.id.toString() ? '#16a34a' : 'white',
                     padding: 12,
                     borderRadius: 8,
                     borderWidth: 1,
-                    borderColor: selectedBatchId == batch.id ? '#16a34a' : '#d1d5db',
+                    borderColor: selectedBatchId === batch.id.toString() ? '#16a34a' : '#d1d5db',
                     minWidth: '45%'
                   }}
                   onPress={() => setSelectedBatchId(batch.id.toString())}
                 >
                   <Text style={{
-                    color: selectedBatchId == batch.id ? 'white' : '#000000',
-                    fontWeight: selectedBatchId == batch.id ? 'bold' : 'normal'
+                    color: selectedBatchId === batch.id.toString() ? 'white' : '#000000',
+                    fontWeight: selectedBatchId === batch.id.toString() ? 'bold' : 'normal'
                   }}>
                     {batch.name}
                   </Text>

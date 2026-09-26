@@ -1,12 +1,13 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, Alert } from 'react-native';
-import { Calendar } from 'react-native-calendars';
 import { getAllBatches, updateBatchStatus } from '@/database/batchQueries';
-import { getEndDate, getBatchProgress, isBatchCompleted } from '@/database/progressUtils';
-import { getSalesByBatch } from '@/database/salesQueries';
 import { getMortalityByBatch } from '@/database/mortalityQueries';
+import { getBatchProgress, getEndDate, isBatchCompleted } from '@/database/progressUtils';
+import { getSalesByBatch } from '@/database/salesQueries';
 import { getUpcomingReminders, requestNotificationPermissions, scheduleFeedReminders, scheduleVaccinationReminders } from '@/services/NotificationService';
+import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 
 export default function CalendarScreen() {
   const [markedDates, setMarkedDates] = useState({});
@@ -14,10 +15,10 @@ export default function CalendarScreen() {
   const [batches, setBatches] = useState([]);
   const [reminders, setReminders] = useState([]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     loadBatches();
     requestNotificationPermissions();
-  }, []);
+  }, []));
 
   const loadBatches = () => {
     const batchData = getAllBatches();
@@ -87,7 +88,7 @@ export default function CalendarScreen() {
     try {
       await scheduleFeedReminders(batch.id, batch.name, batch.startDate);
       await scheduleVaccinationReminders(batch.id, batch.name, batch.startDate);
-      Alert.alert('Success', 'Notifications scheduled for this batch!');
+      Alert.alert('Reminder Guide', 'Feed and vaccination reminders are shown in the calendar guide. Native notifications are not enabled in this build.');
     } catch (error) {
       Alert.alert('Error', 'Failed to schedule notifications');
     }
@@ -258,7 +259,7 @@ export default function CalendarScreen() {
                 }}
                 onPress={() => scheduleNotifications(batch)}
               >
-                <Text style={{ color: 'white', fontWeight: 'bold' }}>Set Reminders</Text>
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Reminder Guide</Text>
               </TouchableOpacity>
               
               <TouchableOpacity

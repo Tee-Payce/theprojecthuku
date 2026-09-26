@@ -3,18 +3,19 @@ import { Picker } from '@react-native-picker/picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { getAllBatches } from '../../database/batchQueries';
+import { getAllBatches, getBatchById } from '../../database/batchQueries';
 import { getClients } from '../../database/clientQueries';
-import { addSale } from '../../database/salesQueries';
+import { getMortalityByBatch } from '../../database/mortalityQueries';
+import { addSale, getSalesDetailsByBatch } from '../../database/salesQueries';
 
 export default function AddSale() {
   const { triggerRefresh } = useAppContext();
-  const { batchId } = useLocalSearchParams();
+  const { batchId, clientId } = useLocalSearchParams();
   const [batches, setBatches] = useState([]);
   const [clients, setClients] = useState([]);
   const [formData, setFormData] = useState({
     batchId: batchId || '',
-    clientId: '',
+    clientId: clientId || '',
     saleType: 'per_bird',
     quantity: '',
     price: '',
@@ -48,14 +49,39 @@ export default function AddSale() {
       return;
     }
 
+    const quantity = Number(formData.quantity);
+    const price = Number(formData.price);
+    if (quantity <= 0 || price <= 0) {
+      Alert.alert('Error', 'Quantity and price must be greater than zero');
+      return;
+    }
+
+    const batch = getBatchById(Number(formData.batchId));
+    if (!batch || batch.status !== 'active') {
+      Alert.alert('Error', 'Select an active batch');
+      return;
+    }
+
+    if (formData.saleType === 'per_bird') {
+      const dead = getMortalityByBatch(batch.id);
+      const sold = getSalesDetailsByBatch(batch.id)
+        .filter(sale => sale.saleType === 'per_bird')
+        .reduce((sum, sale) => sum + sale.quantity, 0);
+      const available = batch.initialChicks - dead - sold;
+      if (quantity > available) {
+        Alert.alert('Error', `Only ${Math.max(available, 0)} birds are available for sale`);
+        return;
+      }
+    }
+
     try {
       const total = calculateTotal();
       addSale({
         batchId: Number(formData.batchId),
         clientId: Number(formData.clientId),
         saleType: formData.saleType,
-        quantity: Number(formData.quantity),
-        price: Number(formData.price),
+        quantity,
+        price,
         total,
         date: formData.date,
         receiptPath: null

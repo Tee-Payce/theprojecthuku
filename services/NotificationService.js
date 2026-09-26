@@ -1,5 +1,4 @@
-// Simple notification service for Expo Go compatibility
-// This provides reminder calculations without native notifications
+// Reminder calculations for builds where native notifications are unavailable.
 
 export const requestNotificationPermissions = async () => {
   // Mock function for Expo Go compatibility
@@ -7,13 +6,11 @@ export const requestNotificationPermissions = async () => {
 };
 
 export const scheduleFeedReminders = async (batchId, batchName, startDate) => {
-  // Mock function - in a real app with development build, this would schedule actual notifications
   console.log(`Feed reminders scheduled for ${batchName}`);
   return true;
 };
 
 export const scheduleVaccinationReminders = async (batchId, batchName, startDate) => {
-  // Mock function - in a real app with development build, this would schedule actual notifications
   console.log(`Vaccination reminders scheduled for ${batchName}`);
   return true;
 };

@@ -1,14 +1,15 @@
 import { getAllBatches } from '@/database/batchQueries';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
 import { ScrollView, Text } from 'react-native';
 import BatchProgressCard from '../../components/BatchProgressCard';
 
 export default function Progress() {
   const [batches, setBatches] = useState([]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load();
-  }, []);
+  }, []));
 
   const load = () => {
     const data = getAllBatches();

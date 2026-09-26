@@ -1,3 +1,4 @@
+import { useAppContext } from '@/contexts/AppContext';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -5,6 +6,7 @@ import { getAllBatches } from '../../database/batchQueries';
 import { addFeedExpense } from '../../database/feedQueries';
 
 export default function AddFeed() {
+  const { triggerRefresh } = useAppContext();
   const { batchId } = useLocalSearchParams();
   const [batches, setBatches] = useState([]);
   const [formData, setFormData] = useState({
@@ -30,16 +32,24 @@ export default function AddFeed() {
       return;
     }
 
+    const quantityKg = Number(formData.quantityKg);
+    const pricePerKg = Number(formData.pricePerKg);
+    if (quantityKg <= 0 || pricePerKg <= 0) {
+      Alert.alert('Error', 'Quantity and price must be greater than zero');
+      return;
+    }
+
     try {
       addFeedExpense({
         batchId: Number(formData.batchId),
         type: formData.type,
-        quantityKg: Number(formData.quantityKg),
-        pricePerKg: Number(formData.pricePerKg),
+        quantityKg,
+        pricePerKg,
         datePurchased: formData.datePurchased,
         receiptPath: null
       });
 
+      triggerRefresh();
       Alert.alert('Success', 'Feed expense recorded!', [
         { text: 'OK', onPress: () => router.back() }
       ]);

@@ -1,5 +1,6 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { Link, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { getBatchById } from '../../database/batchQueries';
 import { getTotalExpensesByBatch } from '../../database/expenseQueries';
@@ -21,11 +22,11 @@ export default function BatchDetail() {
     feedExpenses: []
   });
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     loadBatchData();
-  }, []);
+  }, [loadBatchData]));
 
-  const loadBatchData = () => {
+  const loadBatchData = useCallback(() => {
     const batchData = getBatchById(Number(id));
     const revenue = getSalesByBatch(Number(id));
     const sales = getSalesDetailsByBatch(Number(id));
@@ -41,7 +42,7 @@ export default function BatchDetail() {
 
     setBatch({ ...batchData, totalCost, profit, surviving });
     setStats({ revenue, feedCost, expenseCost, mortality, progress, sales, feedExpenses });
-  };
+  }, [id]);
 
   if (!batch) return <View><Text>Loading...</Text></View>;
 
@@ -60,23 +61,6 @@ export default function BatchDetail() {
       <Text style={{ fontSize: 20, fontWeight: 'bold', color }}>{value}</Text>
       {subtitle && <Text style={{ fontSize: 10, color: '#666', marginTop: 2 }}>{subtitle}</Text>}
     </View>
-  );
-
-  const ActionButton = ({ title, onPress, color = '#16a34a', icon }) => (
-    <TouchableOpacity
-      style={{
-        backgroundColor: color,
-        padding: 12,
-        borderRadius: 8,
-        margin: 4,
-        flex: 1,
-        alignItems: 'center'
-      }}
-      onPress={onPress}
-    >
-      <Text style={{ fontSize: 20, marginBottom: 4 }}>{icon}</Text>
-      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12 }}>{title}</Text>
-    </TouchableOpacity>
   );
 
   const progressColor = stats.progress.percentage < 50 ? '#16a34a' : 
