@@ -17,13 +17,13 @@ export const FarmTheme = {
     emeraldLight: '#86EFAC',
     emeraldSoft: 'rgba(34, 197, 94, 0.12)',
     mint: '#DCFCE7',
-    mintSoft: '#F0FDF4',
+    mintSoft: '#d6f6e0ff',
 
     // Harvest / Golden / Amber (Feed, Eggs, Revenue highlights)
     goldDark: '#92400E',
     gold: '#B45309',
     amber: '#D97706',
-    amberLight: '#F59E0B',
+    amberLight: '#e1930bff',
     amberSoft: 'rgba(245, 158, 11, 0.12)',
     amberPale: '#FEF3C7',
     wheat: '#FDE68A',
