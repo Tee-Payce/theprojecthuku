@@ -18,6 +18,10 @@
       },
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://duwlnesstofqgztmtvdt.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_v7FoH2A2c6HMr_hfGO8_kQ_499Iol7g"
       }
     },
     "production-aab": {
