@@ -1,237 +1,322 @@
+import { FarmButton, FarmInput, GlassCard } from '@/components/farm-ui';
+import { FarmTheme } from '@/constants/theme';
 import { useAppContext } from '@/contexts/AppContext';
 import { getAllBatches } from '@/database/batchQueries';
 import { addExpense } from '@/database/expenseQueries';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const EXPENSE_CATEGORIES = [
-  { name: 'Heating Coal', icon: '🔥' },
-  { name: 'Stress Pack', icon: '💊' },
-  { name: 'Vaccines', icon: '💉' },
-  { name: 'Antibiotics', icon: '🧪' },
-  { name: 'Vitamins', icon: '🍊' },
-  { name: 'Disinfectant', icon: '🧽' },
-  { name: 'Equipment', icon: '🔧' },
-  { name: 'Labor', icon: '👷' },
-  { name: 'Transport', icon: '🚚' },
-  { name: 'Other', icon: '📝' }
+  { name: 'Heating Coal', icon: 'fire' },
+  { name: 'Stress Pack', icon: 'pill' },
+  { name: 'Vaccines', icon: 'needle' },
+  { name: 'Antibiotics', icon: 'flask-outline' },
+  { name: 'Vitamins', icon: 'fruit-citrus' },
+  { name: 'Disinfectant', icon: 'spray-bottle' },
+  { name: 'Equipment', icon: 'wrench' },
+  { name: 'Labor', icon: 'account-hard-hat' },
+  { name: 'Transport', icon: 'truck-fast-outline' },
+  { name: 'Other', icon: 'note-text-outline' },
 ];
 
 export default function AddExpenseScreen() {
   const { batchId } = useLocalSearchParams();
   const { triggerRefresh } = useAppContext();
-  
-  const [selectedCategory, setSelectedCategory] = useState('');
+
+  const [selectedCategory, setSelectedCategory] = useState('Vaccines');
   const [customItem, setCustomItem] = useState('');
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedBatchId, setSelectedBatchId] = useState(batchId || '');
   const [batches, setBatches] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const batchData = getAllBatches();
     setBatches(batchData);
-  }, []);
-
+    if (!batchId && batchData.length > 0) {
+      setSelectedBatchId(batchData[0].id.toString());
+    }
+  }, [batchId]);
 
   const handleSubmit = () => {
-    const itemName = selectedCategory === 'Other' ? customItem : selectedCategory;
+    const itemName = selectedCategory === 'Other' ? customItem.trim() : selectedCategory;
     const parsedAmount = Number(amount);
-    
+
     if (!itemName || !amount || !selectedBatchId) {
-      Alert.alert('Error', 'Please fill in item name, amount, and select a batch');
+      Alert.alert('Required Fields', 'Please select a batch, category, and enter amount.');
       return;
     }
 
     if (parsedAmount <= 0) {
-      Alert.alert('Error', 'Expense amount must be greater than zero');
+      Alert.alert('Invalid Amount', 'Expense amount must be greater than zero.');
       return;
     }
 
-    const expenseId = addExpense(
-      parseInt(selectedBatchId),
-      itemName,
-      selectedCategory,
-      parsedAmount,
-      new Date().toISOString().split('T')[0],
-      notes
-    );
+    setSubmitting(true);
+    try {
+      const expenseId = addExpense(
+        parseInt(selectedBatchId),
+        itemName,
+        selectedCategory,
+        parsedAmount,
+        new Date().toISOString().split('T')[0],
+        notes
+      );
 
-    if (expenseId) {
-      triggerRefresh();
-      Alert.alert('Success', 'Expense added successfully', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
-    } else {
-      Alert.alert('Error', 'Failed to add expense');
+      if (expenseId) {
+        triggerRefresh();
+        Alert.alert('Expense Added', `${itemName} ($${parsedAmount.toFixed(2)}) recorded!`, [
+          { text: 'Done', onPress: () => router.back() },
+        ]);
+      } else {
+        Alert.alert('Error', 'Failed to add expense.');
+      }
+    } catch (_error) {
+      Alert.alert('Error', 'Failed to add expense.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f9fafb',  marginBottom: 40, }}>
-      <View style={{ padding: 16 }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 24, color: '#1f2937' }}>
-          Add Expense
-        </Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Banner */}
+      <GlassCard variant="forest" style={styles.bannerCard} contentStyle={styles.bannerContent}>
+        <View style={styles.bannerIconCircle}>
+          <MaterialCommunityIcons name="receipt-outline" size={26} color={FarmTheme.colors.emeraldLight} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.bannerTitle}>Record Farm Expense</Text>
+          <Text style={styles.bannerSubtitle}>
+            Log veterinary medications, brooder heating coal, bedding shavings, and operational labor.
+          </Text>
+        </View>
+      </GlassCard>
 
-        <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12, color: '#374151' }}>
-          Select Batch
-        </Text>
-        
-        <View style={{ marginBottom: 24 }}>
-          {batches.length > 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {batches.map((batch) => (
+      <GlassCard variant="surface" contentStyle={styles.formCard}>
+        {/* Select Batch */}
+        <Text style={styles.label}>Select Flock Batch *</Text>
+        {batches.length > 0 ? (
+          <View style={styles.pillContainer}>
+            {batches.map((b) => {
+              const selected = selectedBatchId === b.id.toString();
+              return (
                 <TouchableOpacity
-                  key={batch.id}
-                  style={{
-                    backgroundColor: selectedBatchId === batch.id.toString() ? '#16a34a' : 'white',
-                    padding: 12,
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: selectedBatchId === batch.id.toString() ? '#16a34a' : '#d1d5db',
-                    minWidth: '45%'
-                  }}
-                  onPress={() => setSelectedBatchId(batch.id.toString())}
+                  key={b.id}
+                  style={[styles.batchPill, selected && styles.batchPillSelected]}
+                  onPress={() => setSelectedBatchId(b.id.toString())}
+                  activeOpacity={0.8}
                 >
-                  <Text style={{
-                    color: selectedBatchId === batch.id.toString() ? 'white' : '#000000',
-                    fontWeight: selectedBatchId === batch.id.toString() ? 'bold' : 'normal'
-                  }}>
-                    {batch.name}
+                  <MaterialCommunityIcons
+                    name="egg-outline"
+                    size={16}
+                    color={selected ? '#FFFFFF' : FarmTheme.colors.forest}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.batchPillText, selected && styles.batchPillTextSelected]}>
+                    {b.name}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <Text style={{ color: '#6b7280', fontStyle: 'italic' }}>No batches available</Text>
-          )}
-        </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={styles.emptyNotice}>No batches found. Please add a batch first.</Text>
+        )}
 
-        <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12, color: '#374151' }}>
-          Select Category
-        </Text>
-        
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
-          {EXPENSE_CATEGORIES.map((category) => (
-            <TouchableOpacity
-              key={category.name}
-              style={{
-                backgroundColor: selectedCategory === category.name ? '#16a34a' : 'white',
-                padding: 12,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: selectedCategory === category.name ? '#16a34a' : '#d1d5db',
-                flexDirection: 'row',
-                alignItems: 'center',
-                minWidth: '45%'
-              }}
-              onPress={() => setSelectedCategory(category.name)}
-            >
-              <Text style={{ fontSize: 16, marginRight: 8 }}>{category.icon}</Text>
-              <Text style={{
-                color: selectedCategory === category.name ? 'white' : '#000000',
-                fontWeight: selectedCategory === category.name ? 'bold' : 'normal'
-              }}>
-                {category.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        {/* Category Grid */}
+        <Text style={[styles.label, { marginTop: 8 }]}>Expense Category *</Text>
+        <View style={styles.catGrid}>
+          {EXPENSE_CATEGORIES.map((cat) => {
+            const selected = selectedCategory === cat.name;
+            return (
+              <TouchableOpacity
+                key={cat.name}
+                style={[styles.catCard, selected && styles.catCardSelected]}
+                onPress={() => setSelectedCategory(cat.name)}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons
+                  name={cat.icon}
+                  size={20}
+                  color={selected ? '#FFFFFF' : FarmTheme.colors.forest}
+                />
+                <Text style={[styles.catText, selected && styles.catTextSelected]}>
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {selectedCategory === 'Other' && (
-          <View style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
-              Custom Item Name
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: 'white',
-                padding: 12,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: '#d1d5db',
-                fontSize: 16
-              }}
-              placeholder="Enter item name"
-              value={customItem}
-              onChangeText={setCustomItem}
-            />
-          </View>
+          <FarmInput
+            label="Specific Item Description"
+            placeholder="e.g. Pine wood shavings"
+            value={customItem}
+            onChangeText={setCustomItem}
+            iconName="pencil-outline"
+            required
+          />
         )}
 
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
-            Amount ($)
-          </Text>
-          <TextInput
-            style={{
-              backgroundColor: 'white',
-              padding: 12,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: '#d1d5db',
-              fontSize: 16
-            }}
-            placeholder="0.00"
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="numeric"
-          />
-        </View>
+        <FarmInput
+          label="Expense Amount"
+          placeholder="e.g. 45.00"
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="decimal-pad"
+          suffix="$"
+          iconName="cash-outline"
+          required
+        />
 
-        <View style={{ marginBottom: 24 }}>
-          <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
-            Notes (Optional)
-          </Text>
-          <TextInput
-            style={{
-              backgroundColor: 'white',
-              padding: 12,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: '#d1d5db',
-              fontSize: 16,
-              height: 80,
-              textAlignVertical: 'top'
-            }}
-            placeholder="Additional notes..."
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-          />
-        </View>
+        <FarmInput
+          label="Optional Notes / Supplier"
+          placeholder="e.g. Bought from AgriVet Supplies"
+          value={notes}
+          onChangeText={setNotes}
+          iconName="document-text-outline"
+        />
 
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <TouchableOpacity
-            style={{
-              backgroundColor: '#6b7280',
-              padding: 16,
-              borderRadius: 8,
-              flex: 1,
-              alignItems: 'center'
-            }}
-            onPress={() => router.back()}
-          >
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Cancel</Text>
-          </TouchableOpacity>
+        <FarmButton
+          title={submitting ? 'Recording Expense...' : 'Record Expense'}
+          variant="primary"
+          iconName="checkmark-circle-outline"
+          onPress={handleSubmit}
+          loading={submitting}
+          style={{ marginTop: 12 }}
+        />
 
-          <TouchableOpacity
-            style={{
-              backgroundColor: '#16a34a',
-              padding: 16,
-              borderRadius: 8,
-             
-              flex: 1,
-              alignItems: 'center'
-            }}
-            onPress={handleSubmit}
-          >
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Add Expense</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        <FarmButton
+          title="Cancel"
+          variant="glass"
+          onPress={() => router.back()}
+          style={{ marginTop: 10 }}
+        />
+      </GlassCard>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: FarmTheme.colors.background,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  bannerCard: {
+    marginBottom: 16,
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  bannerIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  bannerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  bannerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.75)',
+    lineHeight: 16,
+  },
+  formCard: {
+    padding: 18,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: FarmTheme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  pillContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  batchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 83, 45, 0.06)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: FarmTheme.radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(20, 83, 45, 0.12)',
+  },
+  batchPillSelected: {
+    backgroundColor: FarmTheme.colors.forest,
+    borderColor: FarmTheme.colors.forest,
+  },
+  batchPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: FarmTheme.colors.forest,
+  },
+  batchPillTextSelected: {
+    color: '#FFFFFF',
+  },
+  emptyNotice: {
+    fontSize: 12,
+    color: FarmTheme.colors.rose,
+    marginBottom: 12,
+  },
+  catGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  catCard: {
+    width: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(20, 83, 45, 0.04)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(20, 83, 45, 0.12)',
+    borderRadius: FarmTheme.radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  catCardSelected: {
+    backgroundColor: FarmTheme.colors.forest,
+    borderColor: FarmTheme.colors.forest,
+  },
+  catText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: FarmTheme.colors.textPrimary,
+    flex: 1,
+  },
+  catTextSelected: {
+    color: '#FFFFFF',
+  },
+});

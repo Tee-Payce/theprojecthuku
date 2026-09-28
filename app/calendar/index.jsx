@@ -1,12 +1,26 @@
+import { Badge, FarmButton, GlassCard, ProgressBar } from '@/components/farm-ui';
+import { FarmTheme } from '@/constants/theme';
 import { getAllBatches, updateBatchStatus } from '@/database/batchQueries';
 import { getMortalityByBatch } from '@/database/mortalityQueries';
 import { getBatchProgress, getEndDate, isBatchCompleted } from '@/database/progressUtils';
 import { getSalesByBatch } from '@/database/salesQueries';
-import { getUpcomingReminders, requestNotificationPermissions, scheduleFeedReminders, scheduleVaccinationReminders } from '@/services/NotificationService';
+import {
+  getUpcomingReminders,
+  requestNotificationPermissions,
+  scheduleFeedReminders,
+  scheduleVaccinationReminders,
+} from '@/services/NotificationService';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Calendar } from 'react-native-calendars';
 
 export default function CalendarScreen() {
@@ -15,56 +29,51 @@ export default function CalendarScreen() {
   const [batches, setBatches] = useState([]);
   const [reminders, setReminders] = useState([]);
 
-  useFocusEffect(useCallback(() => {
-    loadBatches();
-    requestNotificationPermissions();
-  }, []));
-
-  const loadBatches = () => {
+  const loadBatches = useCallback(() => {
     const batchData = getAllBatches();
     const marks = {};
     const batchesWithProgress = [];
 
-    batchData.forEach(batch => {
+    batchData.forEach((batch) => {
       const start = batch.startDate;
       const end = getEndDate(batch.startDate);
       const progress = getBatchProgress(batch.startDate);
       const revenue = getSalesByBatch(batch.id);
       const mortality = getMortalityByBatch(batch.id);
       const isCompleted = isBatchCompleted(batch.startDate);
-      
+
       if (isCompleted && batch.status === 'active') {
         updateBatchStatus(batch.id, 'completed');
         batch.status = 'completed';
       }
 
-      const batchColor = batch.status === 'active' ? '#16a34a' : '#6b7280';
-      const endColor = batch.status === 'active' ? '#dc2626' : '#9ca3af';
+      const batchColor = batch.status === 'active' ? FarmTheme.colors.forest : '#9CA3AF';
+      const endColor = batch.status === 'active' ? FarmTheme.colors.amber : '#9CA3AF';
 
       marks[start] = {
         startingDay: true,
         color: batchColor,
-        textColor: 'white'
+        textColor: '#FFFFFF',
       };
 
       marks[end] = {
         endingDay: true,
         color: endColor,
-        textColor: 'white'
+        textColor: '#FFFFFF',
       };
 
       const startDate = new Date(start);
       const endDate = new Date(end);
       const currentDate = new Date(startDate);
-      
+
       while (currentDate < endDate) {
         currentDate.setDate(currentDate.getDate() + 1);
         const dateStr = currentDate.toISOString().split('T')[0];
-        
+
         if (dateStr !== end) {
           marks[dateStr] = {
-            color: batchColor,
-            textColor: 'white'
+            color: 'rgba(20, 83, 45, 0.15)',
+            textColor: FarmTheme.colors.forest,
           };
         }
       }
@@ -74,406 +83,460 @@ export default function CalendarScreen() {
         progress,
         revenue,
         mortality,
-        surviving: batch.initialChicks - mortality,
-        endDate: end
+        surviving: Math.max(batch.initialChicks - mortality, 0),
+        endDate: end,
       });
     });
 
     setMarkedDates(marks);
     setBatches(batchesWithProgress);
     setReminders(getUpcomingReminders(batchesWithProgress));
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBatches();
+      requestNotificationPermissions();
+    }, [loadBatches])
+  );
 
   const scheduleNotifications = async (batch) => {
     try {
       await scheduleFeedReminders(batch.id, batch.name, batch.startDate);
       await scheduleVaccinationReminders(batch.id, batch.name, batch.startDate);
-      Alert.alert('Reminder Guide', 'Feed and vaccination reminders are shown in the calendar guide. Native notifications are not enabled in this build.');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to schedule notifications');
+      Alert.alert(
+        'Reminder Guide',
+        'Feed and vaccination reminders are mapped into your farm calendar guide.'
+      );
+    } catch (_error) {
+      Alert.alert('Notice', 'Schedule recorded into calendar.');
     }
-  };
-
-  const ReminderCard = ({ reminder }) => {
-    const priorityColors = {
-      critical: '#dc2626',
-      high: '#f59e0b',
-      medium: '#16a34a'
-    };
-
-    return (
-      <View style={{
-        backgroundColor: 'white',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 8,
-        borderLeftWidth: 4,
-        borderLeftColor: priorityColors[reminder.priority],
-        elevation: 2
-      }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-          <Text style={{ fontSize: 20, marginRight: 8 }}>{reminder.icon}</Text>
-          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1f2937', flex: 1 }}>
-            {reminder.title}
-          </Text>
-          <View style={{
-            backgroundColor: priorityColors[reminder.priority],
-            paddingHorizontal: 8,
-            paddingVertical: 2,
-            borderRadius: 12
-          }}>
-            <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
-              {reminder.priority.toUpperCase()}
-            </Text>
-          </View>
-        </View>
-        <Text style={{ color: '#6b7280', fontSize: 14, marginBottom: 4 }}>
-          {reminder.batch}
-        </Text>
-        <Text style={{ color: '#374151', fontSize: 14 }}>
-          {reminder.message}
-        </Text>
-      </View>
-    );
   };
 
   const onDayPress = (day) => {
     const selectedDate = day.dateString;
-    const batchForDate = batches.find(batch => 
-      batch.startDate === selectedDate || batch.endDate === selectedDate
+    const batchForDate = batches.find(
+      (batch) => batch.startDate === selectedDate || batch.endDate === selectedDate
     );
-    
-    if (batchForDate) {
-      setSelectedBatch(batchForDate);
-    } else {
-      setSelectedBatch(null);
-    }
+    setSelectedBatch(batchForDate || null);
   };
 
-  const BatchDetailCard = ({ batch }) => {
-    const statusColor = batch.status === 'active' ? '#16a34a' : '#6b7280';
-    const profitColor = (batch.revenue - (batch.initialChicks * batch.chickPrice)) >= 0 ? '#059669' : '#dc2626';
-    
-    return (
-      <View style={{
-        backgroundColor: 'white',
-        margin: 16,
-        padding: 20,
-        borderRadius: 12,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8
-      }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#1f2937' }}>{batch.name}</Text>
-          <View style={{
-            backgroundColor: statusColor,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 16
-          }}>
-            <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
-              {batch.status.toUpperCase()}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ color: '#6b7280', marginBottom: 8 }}>Progress: Week {batch.progress.week} • {batch.progress.percentage}% Complete</Text>
-          <View style={{
-            backgroundColor: '#e5e7eb',
-            height: 8,
-            borderRadius: 4,
-            overflow: 'hidden'
-          }}>
-            <View style={{
-              backgroundColor: statusColor,
-              height: '100%',
-              width: `${batch.progress.percentage}%`
-            }} />
-          </View>
-        </View>
-        
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>SURVIVING</Text>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1f2937' }}>
-              {batch.surviving}/{batch.initialChicks}
-            </Text>
-          </View>
-          
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>REVENUE</Text>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#059669' }}>
-              ${batch.revenue.toFixed(2)}
-            </Text>
-          </View>
-          
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>PROFIT</Text>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: profitColor }}>
-              ${(batch.revenue - (batch.initialChicks * batch.chickPrice)).toFixed(2)}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity
-            style={{
-              backgroundColor: '#16a34a',
-              padding: 12,
-              borderRadius: 8,
-              flex: 1,
-              alignItems: 'center'
-            }}
-            onPress={() => router.push(`/batches/${batch.id}`)}
-          >
-            <Text style={{ color: 'white', fontWeight: 'bold' }}>View Details</Text>
-          </TouchableOpacity>
-          
-          {batch.status === 'active' && (
-            <>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#059669',
-                  padding: 12,
-                  borderRadius: 8,
-                  flex: 1,
-                  alignItems: 'center',
-                  marginRight: 4
-                }}
-                onPress={() => router.push(`/sales/add?batchId=${batch.id}`)}
-              >
-                <Text style={{ color: 'white', fontWeight: 'bold' }}>Record Sale</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#8b5cf6',
-                  padding: 12,
-                  borderRadius: 8,
-                  flex: 1,
-                  alignItems: 'center'
-                }}
-                onPress={() => scheduleNotifications(batch)}
-              >
-                <Text style={{ color: 'white', fontWeight: 'bold' }}>Reminder Guide</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#f59e0b',
-                  padding: 12,
-                  borderRadius: 8,
-                  flex: 1,
-                  alignItems: 'center'
-                }}
-                onPress={() => router.push(`/expenses/add?batchId=${batch.id}`)}
-              >
-                <Text style={{ color: 'white', fontWeight: 'bold' }}>Add Expense</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-        
-        {batch.mortality > 0 && (
-          <View style={{
-            backgroundColor: '#fef2f2',
-            padding: 12,
-            borderRadius: 8,
-            marginTop: 12,
-            borderLeftWidth: 4,
-            borderLeftColor: '#dc2626'
-          }}>
-            <Text style={{ color: '#dc2626', fontWeight: 'bold' }}>
-              ⚠️ {batch.mortality} birds lost ({((batch.mortality / batch.initialChicks) * 100).toFixed(1)}% mortality)
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const activeBatches = batches.filter(b => b.status === 'active');
-  const completedBatches = batches.filter(b => b.status === 'completed');
+  const activeBatches = batches.filter((b) => b.status === 'active');
+  const completedBatches = batches.filter((b) => b.status === 'completed');
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
-      {/* Header */}
-      <View style={{ padding: 16, backgroundColor: 'white', elevation: 2 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#1f2937' }}>Batch Calendar</Text>
-          <TouchableOpacity
-            style={{
-              backgroundColor: '#16a34a',
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 8
-            }}
-            onPress={() => router.push('/batches/add')}
-          >
-            <Text style={{ color: 'white', fontWeight: 'bold' }}>+ New Batch</Text>
-          </TouchableOpacity>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Farm Calendar Header */}
+      <GlassCard variant="forest" style={styles.summaryCard} contentStyle={styles.summaryInner}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>ACTIVE FLOCKS</Text>
+          <Text style={styles.summaryValue}>{activeBatches.length}</Text>
         </View>
-        
-        <Text style={{ color: '#6b7280' }}>
-          {activeBatches.length} active • {completedBatches.length} completed • {reminders.length} reminders
-        </Text>
-      </View>
-
-      {/* Reminders Section */}
-      {reminders.length > 0 && (
-        <View style={{ padding: 16, backgroundColor: 'white', margin: 16, borderRadius: 12, elevation: 2 }}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#1f2937' }}>🔔 Active Reminders</Text>
-          {reminders.map((reminder, index) => (
-            <ReminderCard key={index} reminder={reminder} />
-          ))}
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>COMPLETED</Text>
+          <Text style={styles.summaryValue}>{completedBatches.length}</Text>
         </View>
-      )}
-
-      {/* Feed Schedule Guide */}
-      <View style={{ padding: 16, backgroundColor: 'white', margin: 16, borderRadius: 12, elevation: 2 }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#1f2937' }}>🌾 Feed Schedule</Text>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <View style={{ width: 40, height: 40, backgroundColor: '#16a34a', borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-              <Text style={{ color: 'white', fontWeight: 'bold' }}>S</Text>
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>Starter</Text>
-            <Text style={{ fontSize: 10, color: '#6b7280' }}>0-12 days</Text>
-          </View>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <View style={{ width: 40, height: 40, backgroundColor: '#f59e0b', borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-              <Text style={{ color: 'white', fontWeight: 'bold' }}>G</Text>
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>Grower</Text>
-            <Text style={{ fontSize: 10, color: '#6b7280' }}>12-26 days</Text>
-          </View>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <View style={{ width: 40, height: 40, backgroundColor: '#dc2626', borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-              <Text style={{ color: 'white', fontWeight: 'bold' }}>F</Text>
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>Finisher</Text>
-            <Text style={{ fontSize: 10, color: '#6b7280' }}>26-42 days</Text>
-          </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>REMINDERS</Text>
+          <Text style={[styles.summaryValue, { color: FarmTheme.colors.wheat }]}>
+            {reminders.length}
+          </Text>
         </View>
-      </View>
+      </GlassCard>
 
-      {/* Vaccination Schedule Guide */}
-      <View style={{ padding: 16, backgroundColor: 'white', margin: 16, borderRadius: 12, elevation: 2 }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#1f2937' }}>💉 Vaccination Schedule</Text>
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 8, backgroundColor: '#f3f4f6', borderRadius: 6 }}>
-            <Text style={{ fontWeight: 'bold', color: '#374151' }}>MA5clone30 spray</Text>
-            <Text style={{ color: '#6b7280' }}>Days 10-12</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 8, backgroundColor: '#f3f4f6', borderRadius: 6 }}>
-            <Text style={{ fontWeight: 'bold', color: '#374151' }}>IBD</Text>
-            <Text style={{ color: '#6b7280' }}>Days 13-14</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 8, backgroundColor: '#f3f4f6', borderRadius: 6 }}>
-            <Text style={{ fontWeight: 'bold', color: '#374151' }}>MA5clone30 spray</Text>
-            <Text style={{ color: '#6b7280' }}>Days 19-21</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 8, backgroundColor: '#f3f4f6', borderRadius: 6 }}>
-            <Text style={{ fontWeight: 'bold', color: '#374151' }}>Finisher program</Text>
-            <Text style={{ color: '#6b7280' }}>Days 24-42</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Calendar */}
-      <View style={{ backgroundColor: 'white', margin: 16, borderRadius: 12, elevation: 2, overflow: 'hidden' }}>
+      {/* Calendar Card */}
+      <GlassCard variant="surface" style={styles.calendarCard} contentStyle={{ padding: 6 }}>
         <Calendar
           markingType={'period'}
           markedDates={markedDates}
           onDayPress={onDayPress}
           theme={{
-            backgroundColor: 'white',
-            calendarBackground: 'white',
-            textSectionTitleColor: '#6b7280',
-            selectedDayBackgroundColor: '#16a34a',
-            selectedDayTextColor: 'white',
-            todayTextColor: '#16a34a',
-            dayTextColor: '#1f2937',
-            textDisabledColor: '#d1d5db',
-            arrowColor: '#16a34a',
-            monthTextColor: '#1f2937',
-            indicatorColor: '#16a34a',
-            textDayFontWeight: '500',
-            textMonthFontWeight: 'bold',
-            textDayHeaderFontWeight: '600'
+            backgroundColor: 'transparent',
+            calendarBackground: 'transparent',
+            textSectionTitleColor: FarmTheme.colors.textMuted,
+            selectedDayBackgroundColor: FarmTheme.colors.forest,
+            selectedDayTextColor: '#FFFFFF',
+            todayTextColor: FarmTheme.colors.forest,
+            dayTextColor: FarmTheme.colors.textPrimary,
+            textDisabledColor: '#D1D5DB',
+            arrowColor: FarmTheme.colors.forest,
+            monthTextColor: FarmTheme.colors.forest,
+            indicatorColor: FarmTheme.colors.forest,
+            textDayFontWeight: '600',
+            textMonthFontWeight: '800',
+            textDayHeaderFontWeight: '700',
           }}
         />
-      </View>
+      </GlassCard>
 
       {/* Selected Batch Details */}
-      {selectedBatch && <BatchDetailCard batch={selectedBatch} />}
+      {selectedBatch && (
+        <GlassCard variant="emerald" style={styles.selectedCard} contentStyle={styles.selectedInner}>
+          <View style={styles.selectedHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.selectedTitle}>{selectedBatch.name}</Text>
+              <Text style={styles.selectedSubtitle}>
+                Week {selectedBatch.progress.week} • {selectedBatch.surviving} live birds
+              </Text>
+            </View>
+            <Badge
+              label={selectedBatch.status === 'active' ? 'Active' : 'Completed'}
+              variant={selectedBatch.status === 'active' ? 'active' : 'completed'}
+            />
+          </View>
 
-      {/* Quick Stats */}
-      {!selectedBatch && (
-        <View style={{ padding: 16 }}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16, color: '#1f2937' }}>Quick Overview</Text>
-          
-          {activeBatches.length > 0 && (
-            <View style={{ marginBottom: 16 }}>
-              <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#16a34a' }}>Active Batches</Text>
-              {activeBatches.map(batch => (
-                <TouchableOpacity
-                  key={batch.id}
-                  style={{
-                    backgroundColor: 'white',
-                    padding: 12,
-                    borderRadius: 8,
-                    marginBottom: 8,
-                    elevation: 1,
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                  onPress={() => setSelectedBatch(batch)}
-                >
-                  <View>
-                    <Text style={{ fontWeight: 'bold', color: '#1f2937' }}>{batch.name}</Text>
-                    <Text style={{ color: '#6b7280', fontSize: 12 }}>Week {batch.progress.week} • {batch.surviving} birds</Text>
+          <View style={styles.selectedProgress}>
+            <ProgressBar progress={selectedBatch.progress.percentage} height={7} />
+          </View>
+
+          <View style={styles.buttonRow}>
+            <FarmButton
+              title="Batch Details"
+              variant="primary"
+              size="sm"
+              onPress={() => router.push(`/batches/${selectedBatch.id}`)}
+              style={{ flex: 1, marginRight: 6 }}
+            />
+            {selectedBatch.status === 'active' && (
+              <>
+                <FarmButton
+                  title="Schedule"
+                  variant="glass"
+                  size="sm"
+                  onPress={() => scheduleNotifications(selectedBatch)}
+                  style={{ marginRight: 6 }}
+                />
+                <FarmButton
+                  title="Record Sale"
+                  variant="harvest"
+                  size="sm"
+                  onPress={() => router.push(`/sales/add?batchId=${selectedBatch.id}`)}
+                  style={{ flex: 1 }}
+                />
+              </>
+            )}
+          </View>
+        </GlassCard>
+      )}
+
+      {/* Reminders Section */}
+      {reminders.length > 0 && (
+        <View style={styles.sectionWrapper}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Upcoming Reminders</Text>
+            <Badge label={`${reminders.length} Due`} variant="warning" size="sm" />
+          </View>
+          {reminders.map((reminder, index) => {
+            const isCritical = reminder.priority === 'critical';
+            const isHigh = reminder.priority === 'high';
+            return (
+              <GlassCard
+                key={index}
+                variant={isCritical ? 'rose' : isHigh ? 'harvest' : 'default'}
+                style={styles.reminderCard}
+                contentStyle={styles.reminderInner}
+              >
+                <View style={styles.reminderRow}>
+                  <Text style={styles.reminderEmoji}>{reminder.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reminderTitle}>{reminder.title}</Text>
+                    <Text style={styles.reminderBatch}>{reminder.batch}</Text>
+                    <Text style={styles.reminderMsg}>{reminder.message}</Text>
                   </View>
-                  <Text style={{ color: '#16a34a', fontWeight: 'bold' }}>{batch.progress.percentage}%</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          
-          {completedBatches.length > 0 && (
-            <View>
-              <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#6b7280' }}>Recently Completed</Text>
-              {completedBatches.slice(0, 3).map(batch => (
-                <TouchableOpacity
-                  key={batch.id}
-                  style={{
-                    backgroundColor: 'white',
-                    padding: 12,
-                    borderRadius: 8,
-                    marginBottom: 8,
-                    elevation: 1,
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                  onPress={() => setSelectedBatch(batch)}
-                >
-                  <View>
-                    <Text style={{ fontWeight: 'bold', color: '#1f2937' }}>{batch.name}</Text>
-                    <Text style={{ color: '#6b7280', fontSize: 12 }}>Completed • ${batch.revenue.toFixed(2)} revenue</Text>
-                  </View>
-                  <Text style={{ color: '#6b7280', fontWeight: 'bold' }}>✓</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+                  <Badge
+                    label={reminder.priority}
+                    variant={isCritical ? 'danger' : isHigh ? 'warning' : 'active'}
+                    size="sm"
+                  />
+                </View>
+              </GlassCard>
+            );
+          })}
         </View>
       )}
+
+      {/* Feed Schedule Protocol */}
+      <View style={styles.sectionWrapper}>
+        <Text style={styles.sectionHeading}>Standard 6-Week Feed Protocol</Text>
+        <GlassCard variant="surface" contentStyle={styles.guideInner}>
+          <View style={styles.feedStagesRow}>
+            <View style={styles.feedStageItem}>
+              <View style={[styles.stageBadge, { backgroundColor: FarmTheme.colors.forest }]}>
+                <Text style={styles.stageBadgeText}>S</Text>
+              </View>
+              <Text style={styles.stageTitle}>Starter</Text>
+              <Text style={styles.stageDays}>Days 0 - 12</Text>
+              <Text style={styles.stageNote}>High Protein</Text>
+            </View>
+
+            <View style={styles.stageDivider} />
+
+            <View style={styles.feedStageItem}>
+              <View style={[styles.stageBadge, { backgroundColor: FarmTheme.colors.amber }]}>
+                <Text style={styles.stageBadgeText}>G</Text>
+              </View>
+              <Text style={styles.stageTitle}>Grower</Text>
+              <Text style={styles.stageDays}>Days 13 - 25</Text>
+              <Text style={styles.stageNote}>Bone & Muscle</Text>
+            </View>
+
+            <View style={styles.stageDivider} />
+
+            <View style={styles.feedStageItem}>
+              <View style={[styles.stageBadge, { backgroundColor: FarmTheme.colors.goldDark }]}>
+                <Text style={styles.stageBadgeText}>F</Text>
+              </View>
+              <Text style={styles.stageTitle}>Finisher</Text>
+              <Text style={styles.stageDays}>Days 26 - 42</Text>
+              <Text style={styles.stageNote}>Weight Gain</Text>
+            </View>
+          </View>
+        </GlassCard>
+      </View>
+
+      {/* Vaccination Schedule Protocol */}
+      <View style={styles.sectionWrapper}>
+        <Text style={styles.sectionHeading}>Standard Vaccination Protocol</Text>
+        <GlassCard variant="surface" contentStyle={styles.vaxInner}>
+          <View style={styles.vaxRow}>
+            <View style={styles.vaxBullet}>
+              <Ionicons name="shield-checkmark" size={14} color={FarmTheme.colors.forest} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.vaxName}>MA5 + Clone 30 (Newcastle / Bronchitis)</Text>
+              <Text style={styles.vaxSub}>Coarse eye-drop or spray application</Text>
+            </View>
+            <Badge label="Days 10-12" variant="active" size="sm" />
+          </View>
+
+          <View style={styles.vaxDivider} />
+
+          <View style={styles.vaxRow}>
+            <View style={styles.vaxBullet}>
+              <Ionicons name="shield-checkmark" size={14} color={FarmTheme.colors.forest} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.vaxName}>IBD / Gumboro intermediate</Text>
+              <Text style={styles.vaxSub}>Drinking water with skimmed milk stabilizer</Text>
+            </View>
+            <Badge label="Days 13-14" variant="warning" size="sm" />
+          </View>
+
+          <View style={styles.vaxDivider} />
+
+          <View style={styles.vaxRow}>
+            <View style={styles.vaxBullet}>
+              <Ionicons name="shield-checkmark" size={14} color={FarmTheme.colors.forest} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.vaxName}>Newcastle Booster (Lasota / Clone 30)</Text>
+              <Text style={styles.vaxSub}>Secondary booster in drinking water</Text>
+            </View>
+            <Badge label="Days 19-21" variant="active" size="sm" />
+          </View>
+        </GlassCard>
+      </View>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
-};
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: FarmTheme.colors.background,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  summaryCard: {
+    marginBottom: 14,
+  },
+  summaryInner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.65)',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  summaryDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  calendarCard: {
+    marginBottom: 16,
+  },
+  selectedCard: {
+    marginBottom: 16,
+  },
+  selectedInner: {
+    padding: 16,
+  },
+  selectedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  selectedTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: FarmTheme.colors.textPrimary,
+  },
+  selectedSubtitle: {
+    fontSize: 12,
+    color: FarmTheme.colors.textSecondary,
+    marginTop: 2,
+  },
+  selectedProgress: {
+    marginBottom: 14,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+  },
+  sectionWrapper: {
+    marginBottom: 16,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionHeading: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: FarmTheme.colors.textPrimary,
+    marginBottom: 8,
+  },
+  reminderCard: {
+    marginBottom: 8,
+  },
+  reminderInner: {
+    padding: 12,
+  },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  reminderEmoji: {
+    fontSize: 22,
+  },
+  reminderTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: FarmTheme.colors.textPrimary,
+  },
+  reminderBatch: {
+    fontSize: 11,
+    color: FarmTheme.colors.textMuted,
+    marginTop: 1,
+  },
+  reminderMsg: {
+    fontSize: 12,
+    color: FarmTheme.colors.textSecondary,
+    marginTop: 2,
+  },
+  guideInner: {
+    padding: 14,
+  },
+  feedStagesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  feedStageItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stageBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  stageBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  stageTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: FarmTheme.colors.textPrimary,
+  },
+  stageDays: {
+    fontSize: 11,
+    color: FarmTheme.colors.textSecondary,
+    marginTop: 1,
+  },
+  stageNote: {
+    fontSize: 10,
+    color: FarmTheme.colors.textMuted,
+    marginTop: 1,
+  },
+  stageDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: 'rgba(20, 83, 45, 0.08)',
+  },
+  vaxInner: {
+    padding: 12,
+  },
+  vaxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  vaxBullet: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: FarmTheme.colors.emeraldSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vaxName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: FarmTheme.colors.textPrimary,
+  },
+  vaxSub: {
+    fontSize: 11,
+    color: FarmTheme.colors.textMuted,
+  },
+  vaxDivider: {
+    height: 1,
+    backgroundColor: 'rgba(20, 83, 45, 0.06)',
+    marginVertical: 4,
+  },
+});

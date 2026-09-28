@@ -1,32 +1,11 @@
+import { FarmButton, FarmInput, GlassCard } from '@/components/farm-ui';
+import { FarmTheme } from '@/constants/theme';
 import { useAppContext } from '@/contexts/AppContext';
+import { createBatch } from '@/database/batchQueries';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { createBatch } from '../../database/batchQueries';
-
-const InputField = React.memo(function InputField({ label, value, onChangeText, placeholder, keyboardType = 'default', required = false }) {
-  return (
-  <View style={{ marginBottom: 16 }}>
-    <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#374151' }}>
-      {label} {required && <Text style={{ color: '#dc2626' }}>*</Text>}
-    </Text>
-    <TextInput
-      style={{
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
-        backgroundColor: 'white'
-      }}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      keyboardType={keyboardType}
-    />
-  </View>
-  );
-});
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function AddBatch() {
   const { triggerRefresh } = useAppContext();
@@ -35,147 +14,286 @@ export default function AddBatch() {
   const [chickPrice, setChickPrice] = useState('');
   const [expectedPricePerBird, setExpectedPricePerBird] = useState('');
   const [expectedPricePerKg, setExpectedPricePerKg] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const save = useCallback(() => {
-    if (!name || !initialChicks || !chickPrice) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    if (!name.trim() || !initialChicks || !chickPrice) {
+      Alert.alert('Required Fields', 'Please fill in flock name, chick quantity, and unit price.');
       return;
     }
 
     const chickCount = Number(initialChicks);
     const pricePerChick = Number(chickPrice);
     if (!Number.isInteger(chickCount) || chickCount <= 0 || pricePerChick <= 0) {
-      Alert.alert('Error', 'Enter a positive whole number of chicks and a positive chick price');
+      Alert.alert('Invalid Entry', 'Enter a positive whole number of chicks and a valid chick price.');
       return;
     }
 
+    setSubmitting(true);
     try {
       createBatch({
-        name,
+        name: name.trim(),
         startDate: new Date().toISOString().split('T')[0],
         initialChicks: chickCount,
         chickPrice: pricePerChick,
         expectedPricePerBird: Number(expectedPricePerBird) || 8,
-        expectedPricePerKg: Number(expectedPricePerKg) || 5
+        expectedPricePerKg: Number(expectedPricePerKg) || 5,
       });
 
       triggerRefresh();
-      Alert.alert('Success', 'Batch created successfully!', [
-        { text: 'OK', onPress: () => router.back() }
+      Alert.alert('Flock Created', `Batch "${name.trim()}" successfully registered!`, [
+        { text: 'View Batches', onPress: () => router.back() },
       ]);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create batch');
+    } catch (_error) {
+      Alert.alert('Error', 'Failed to create batch. Please check your data.');
+    } finally {
+      setSubmitting(false);
     }
   }, [name, initialChicks, chickPrice, expectedPricePerBird, expectedPricePerKg, triggerRefresh]);
 
-  const totalCost = (Number(initialChicks) || 0) * (Number(chickPrice) || 0);
-  const expectedRevenueBird = (Number(initialChicks) || 0) * (Number(expectedPricePerBird) || 0);
-  const expectedRevenueKg = (Number(initialChicks) || 0) * 2.5 * (Number(expectedPricePerKg) || 0);
+  const chicksNum = Number(initialChicks) || 0;
+  const priceNum = Number(chickPrice) || 0;
+  const totalCost = chicksNum * priceNum;
+  const expPriceBird = Number(expectedPricePerBird) || 8;
+  const expPriceKg = Number(expectedPricePerKg) || 5;
+  const expectedRevenueBird = chicksNum * expPriceBird;
+  const expectedRevenueKg = chicksNum * 2.5 * expPriceKg;
+  const expectedProfit = expectedRevenueBird - totalCost;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
-      <View style={{ padding: 16, backgroundColor: 'white', marginBottom: 16 }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 8 }}>New Batch</Text>
-        <Text style={{ color: '#666' }}>Create a new poultry batch to start tracking</Text>
-      </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Banner Card */}
+      <GlassCard variant="forest" style={styles.bannerCard} contentStyle={styles.bannerContent}>
+        <View style={styles.bannerIconCircle}>
+          <Ionicons name="egg-outline" size={26} color={FarmTheme.colors.emeraldLight} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.bannerTitle}>Register New Flock</Text>
+          <Text style={styles.bannerSubtitle}>
+            Track chicks from day-old through harvest week with automated 6-week growth milestones.
+          </Text>
+        </View>
+      </GlassCard>
 
-      <View style={{ padding: 16 }}>
-        <InputField
+      {/* Main Glass Form */}
+      <GlassCard variant="surface" contentStyle={styles.formContent}>
+        <FarmInput
           label="Batch Name"
+          placeholder="e.g. Broiler Batch March 2024"
           value={name}
           onChangeText={setName}
-          placeholder="e.g., Batch March 2024"
+          iconName="bookmark-outline"
           required
         />
 
-        <InputField
-          label="Number of Chicks"
-          value={initialChicks}
-          onChangeText={setInitialChicks}
-          placeholder="e.g., 100"
-          keyboardType="numeric"
-          required
-        />
+        <View style={styles.formRow}>
+          <FarmInput
+            label="Chicks Count"
+            placeholder="e.g. 500"
+            value={initialChicks}
+            onChangeText={setInitialChicks}
+            keyboardType="number-pad"
+            iconName="people-outline"
+            suffix="birds"
+            containerStyle={{ flex: 1, marginRight: 8 }}
+            required
+          />
 
-        <InputField
-          label="Price per Chick"
-          value={chickPrice}
-          onChangeText={setChickPrice}
-          placeholder="e.g., 1.50"
-          keyboardType="decimal-pad"
-          required
-        />
+          <FarmInput
+            label="Cost per Chick"
+            placeholder="e.g. 1.25"
+            value={chickPrice}
+            onChangeText={setChickPrice}
+            keyboardType="decimal-pad"
+            iconName="pricetag-outline"
+            suffix="$"
+            containerStyle={{ flex: 1 }}
+            required
+          />
+        </View>
 
-        <InputField
-          label="Expected Price per Bird (Live)"
-          value={expectedPricePerBird}
-          onChangeText={setExpectedPricePerBird}
-          placeholder="e.g., 8.00"
-          keyboardType="decimal-pad"
-        />
+        <View style={styles.formRow}>
+          <FarmInput
+            label="Target Price / Bird"
+            placeholder="8.00"
+            value={expectedPricePerBird}
+            onChangeText={setExpectedPricePerBird}
+            keyboardType="decimal-pad"
+            suffix="$"
+            containerStyle={{ flex: 1, marginRight: 8 }}
+            helperText="Live mature bird target"
+          />
 
-        <InputField
-          label="Expected Price per Kg"
-          value={expectedPricePerKg}
-          onChangeText={setExpectedPricePerKg}
-          placeholder="e.g., 5.00"
-          keyboardType="decimal-pad"
-        />
+          <FarmInput
+            label="Target Price / Kg"
+            placeholder="5.00"
+            value={expectedPricePerKg}
+            onChangeText={setExpectedPricePerKg}
+            keyboardType="decimal-pad"
+            suffix="$"
+            containerStyle={{ flex: 1 }}
+            helperText="Dressed carcass target"
+          />
+        </View>
 
+        {/* Live Projection Glass Card */}
         {totalCost > 0 && (
-          <View style={{
-            backgroundColor: 'white',
-            padding: 16,
-            borderRadius: 8,
-            marginBottom: 16,
-            elevation: 2
-          }}>
-            <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>Cost Summary</Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text>Initial Investment:</Text>
-              <Text style={{ fontWeight: 'bold' }}>${totalCost.toFixed(2)}</Text>
+          <GlassCard variant="harvest" style={styles.summaryCard} contentStyle={styles.summaryInner}>
+            <View style={styles.summaryHeader}>
+              <Ionicons name="calculator-outline" size={18} color={FarmTheme.colors.goldDark} />
+              <Text style={styles.summaryTitle}>Live Investment & Target Forecast</Text>
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-              <Text>Expected Revenue (Live):</Text>
-              <Text style={{ fontWeight: 'bold', color: '#059669' }}>${expectedRevenueBird.toFixed(2)}</Text>
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Initial Flock Cost:</Text>
+              <Text style={styles.summaryVal}>${totalCost.toFixed(2)}</Text>
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-              <Text>Expected Revenue (Kg):</Text>
-              <Text style={{ fontWeight: 'bold', color: '#059669' }}>${expectedRevenueKg.toFixed(2)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
-              <Text style={{ fontWeight: 'bold' }}>Expected Profit (Live):</Text>
-              <Text style={{ fontWeight: 'bold', color: expectedRevenueBird - totalCost >= 0 ? '#059669' : '#dc2626' }}>
-                ${(expectedRevenueBird - totalCost).toFixed(2)}
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Expected Live Revenue (@${expPriceBird}):</Text>
+              <Text style={[styles.summaryVal, { color: FarmTheme.colors.forest }]}>
+                ${expectedRevenueBird.toFixed(2)}
               </Text>
             </View>
-          </View>
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Expected Carcass Revenue (@${expPriceKg}/kg):</Text>
+              <Text style={[styles.summaryVal, { color: FarmTheme.colors.forest }]}>
+                ${expectedRevenueKg.toFixed(2)}
+              </Text>
+            </View>
+
+            <View style={styles.summaryDivider} />
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryBoldLabel}>Projected Gross Margin:</Text>
+              <Text
+                style={[
+                  styles.summaryBoldVal,
+                  {
+                    color: expectedProfit >= 0 ? FarmTheme.colors.forest : FarmTheme.colors.rose,
+                  },
+                ]}
+              >
+                ${expectedProfit.toFixed(2)}
+              </Text>
+            </View>
+          </GlassCard>
         )}
 
-        <TouchableOpacity
-          style={{
-            backgroundColor: '#16a34a',
-            padding: 16,
-            borderRadius: 8,
-            alignItems: 'center',
-            marginTop: 16
-          }}
+        <FarmButton
+          title={submitting ? 'Creating Batch...' : 'Create Batch'}
+          variant="primary"
+          iconName="checkmark-circle-outline"
           onPress={save}
-        >
-          <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>Create Batch</Text>
-        </TouchableOpacity>
+          loading={submitting}
+          style={{ marginTop: 8 }}
+        />
 
-        <TouchableOpacity
-          style={{
-            padding: 16,
-            alignItems: 'center',
-            marginTop: 8
-          }}
+        <FarmButton
+          title="Cancel"
+          variant="glass"
           onPress={() => router.back()}
-        >
-          <Text style={{ color: '#6b7280', fontSize: 16 }}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
+          style={{ marginTop: 10 }}
+        />
+      </GlassCard>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: FarmTheme.colors.background,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  bannerCard: {
+    marginBottom: 16,
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  bannerIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  bannerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  bannerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.75)',
+    lineHeight: 16,
+  },
+  formContent: {
+    padding: 18,
+  },
+  formRow: {
+    flexDirection: 'row',
+  },
+  summaryCard: {
+    marginVertical: 14,
+  },
+  summaryInner: {
+    padding: 14,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  summaryTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: FarmTheme.colors.goldDark,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: FarmTheme.colors.textSecondary,
+  },
+  summaryVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: FarmTheme.colors.textPrimary,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: 'rgba(180, 83, 9, 0.15)',
+    marginVertical: 6,
+  },
+  summaryBoldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: FarmTheme.colors.textPrimary,
+  },
+  summaryBoldVal: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+});

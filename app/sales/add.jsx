@@ -1,40 +1,47 @@
+import { FarmButton, FarmInput, GlassCard } from '@/components/farm-ui';
+import { FarmTheme } from '@/constants/theme';
 import { useAppContext } from '@/contexts/AppContext';
+import { getAllBatches, getBatchById } from '@/database/batchQueries';
+import { getClients } from '@/database/clientQueries';
+import { getMortalityByBatch } from '@/database/mortalityQueries';
+import { addSale, getSalesDetailsByBatch } from '@/database/salesQueries';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { getAllBatches, getBatchById } from '../../database/batchQueries';
-import { getClients } from '../../database/clientQueries';
-import { getMortalityByBatch } from '../../database/mortalityQueries';
-import { addSale, getSalesDetailsByBatch } from '../../database/salesQueries';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function AddSale() {
   const { triggerRefresh } = useAppContext();
   const { batchId, clientId } = useLocalSearchParams();
   const [batches, setBatches] = useState([]);
   const [clients, setClients] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     batchId: batchId || '',
     clientId: clientId || '',
     saleType: 'per_bird',
     quantity: '',
     price: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
   });
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = () => {
-    const batchData = getAllBatches().filter(b => b.status === 'active');
+    const batchData = getAllBatches().filter((b) => b.status === 'active');
     const clientData = getClients();
     setBatches(batchData);
     setClients(clientData);
-  };
+
+    if (!batchId && batchData.length > 0) {
+      setFormData((prev) => ({ ...prev, batchId: batchData[0].id.toString() }));
+    }
+    if (!clientId && clientData.length > 0) {
+      setFormData((prev) => ({ ...prev, clientId: clientData[0].id.toString() }));
+    }
+  }, [batchId, clientId]);
 
   const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const calculateTotal = () => {
@@ -45,35 +52,39 @@ export default function AddSale() {
 
   const save = () => {
     if (!formData.batchId || !formData.clientId || !formData.quantity || !formData.price) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert('Required Fields', 'Please select a batch and client, and enter quantity and price.');
       return;
     }
 
     const quantity = Number(formData.quantity);
     const price = Number(formData.price);
     if (quantity <= 0 || price <= 0) {
-      Alert.alert('Error', 'Quantity and price must be greater than zero');
+      Alert.alert('Invalid Entry', 'Quantity and price must be greater than zero.');
       return;
     }
 
     const batch = getBatchById(Number(formData.batchId));
     if (!batch || batch.status !== 'active') {
-      Alert.alert('Error', 'Select an active batch');
+      Alert.alert('Batch Inactive', 'Please select an active flock batch.');
       return;
     }
 
     if (formData.saleType === 'per_bird') {
       const dead = getMortalityByBatch(batch.id);
       const sold = getSalesDetailsByBatch(batch.id)
-        .filter(sale => sale.saleType === 'per_bird')
+        .filter((sale) => sale.saleType === 'per_bird')
         .reduce((sum, sale) => sum + sale.quantity, 0);
       const available = batch.initialChicks - dead - sold;
       if (quantity > available) {
-        Alert.alert('Error', `Only ${Math.max(available, 0)} birds are available for sale`);
+        Alert.alert(
+          'Inventory Limit',
+          `Only ${Math.max(available, 0)} birds are available for sale from this batch.`
+        );
         return;
       }
     }
 
+    setSubmitting(true);
     try {
       const total = calculateTotal();
       addSale({
@@ -84,196 +95,361 @@ export default function AddSale() {
         price,
         total,
         date: formData.date,
-        receiptPath: null
+        receiptPath: null,
       });
 
       triggerRefresh();
-      Alert.alert('Success', 'Sale recorded successfully!', [
-        { text: 'OK', onPress: () => router.back() }
+      Alert.alert('Sale Recorded', `Successfully recorded $${total.toFixed(2)} sale!`, [
+        { text: 'Done', onPress: () => router.back() },
       ]);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to record sale');
+    } catch (_error) {
+      Alert.alert('Error', 'Failed to record sale transaction.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const InputField = ({ label, value, onChangeText, placeholder, keyboardType = 'default', required = false }) => (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#374151' }}>
-        {label} {required && <Text style={{ color: '#dc2626' }}>*</Text>}
-      </Text>
-      <TextInput
-        style={{
-          borderWidth: 1,
-          borderColor: '#d1d5db',
-          borderRadius: 8,
-          padding: 12,
-          fontSize: 16,
-          backgroundColor: 'white'
-        }}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        keyboardType={keyboardType}
-      />
-    </View>
-  );
-
-  const PickerField = ({ label, selectedValue, onValueChange, items, required = false }) => (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#374151' }}>
-        {label} {required && <Text style={{ color: '#dc2626' }}>*</Text>}
-      </Text>
-      <View style={{
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        backgroundColor: 'white'
-      }}>
-        <Picker
-          selectedValue={selectedValue}
-          onValueChange={onValueChange}
-          style={{ 
-            height: 50,
-            color: '#000000'
-          }}
-          itemStyle={{
-            color: '#000000',
-            fontSize: 16
-          }}
-        >
-          <Picker.Item label="Select..." value="" color="#6b7280" />
-          {items.map(item => (
-            <Picker.Item key={item.value} label={item.label} value={item.value} color="#000000" />
-          ))}
-        </Picker>
-      </View>
-    </View>
-  );
-
   const total = calculateTotal();
+  const isPerBird = formData.saleType === 'per_bird';
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
-      <View style={{ padding: 16, backgroundColor: 'white', marginBottom: 16 }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 8 }}>Record Sale</Text>
-        <Text style={{ color: '#666' }}>Add a new sale transaction</Text>
-      </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Banner */}
+      <GlassCard variant="harvest" style={styles.bannerCard} contentStyle={styles.bannerContent}>
+        <View style={styles.bannerIconCircle}>
+          <Ionicons name="cash" size={26} color={FarmTheme.colors.goldDark} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.bannerTitle}>Record Farm Sale</Text>
+          <Text style={styles.bannerSubtitle}>
+            Log live bird orders or dressed kilogram sales with automated customer receipts.
+          </Text>
+        </View>
+      </GlassCard>
 
-      <View style={{ padding: 16 }}>
-        <PickerField
-          label="Batch"
-          // style={{ backgroundColor: '#95ef85ff', borderColor: '#49fe88ff' }}
-          selectedValue={formData.batchId}
-          onValueChange={(value) => updateField('batchId', value)}
-          items={batches.map(batch => ({
-            label: `${batch.name} (${batch.initialChicks} chicks)`,
-            value: batch.id.toString()
-          }))}
-          required
-        />
-
-        <PickerField
-          label="Client"
-          selectedValue={formData.clientId}
-          onValueChange={(value) => updateField('clientId', value)}
-          items={clients.map(client => ({
-            label: `${client.name}${client.phone ? ` (${client.phone})` : ''}`,
-            value: client.id.toString()
-          }))}
-          required
-        />
-
-        <PickerField
-          label="Sale Type"
-          selectedValue={formData.saleType}
-          onValueChange={(value) => updateField('saleType', value)}
-          items={[
-            { label: 'Per Bird (Live)', value: 'per_bird' },
-            { label: 'Per Kilogram', value: 'per_kg' }
-          ]}
-          required
-        />
-
-        <InputField
-          label={`Quantity (${formData.saleType === 'per_bird' ? 'Birds' : 'Kg'})`}
-          value={formData.quantity}
-          onChangeText={(value) => updateField('quantity', value)}
-          placeholder={formData.saleType === 'per_bird' ? 'e.g., 10' : 'e.g., 25.5'}
-          keyboardType="decimal-pad"
-          required
-        />
-
-        <InputField
-          label={`Price per ${formData.saleType === 'per_bird' ? 'Bird' : 'Kg'}`}
-          value={formData.price}
-          onChangeText={(value) => updateField('price', value)}
-          placeholder="e.g., 8.00"
-          keyboardType="decimal-pad"
-          required
-        />
-
-        <InputField
-          label="Sale Date"
-          value={formData.date}
-          onChangeText={(value) => updateField('date', value)}
-          placeholder="YYYY-MM-DD"
-        />
-
-        {/* Total Display */}
-        {total > 0 && (
-          <View style={{
-            backgroundColor: 'white',
-            padding: 16,
-            borderRadius: 8,
-            marginBottom: 16,
-            elevation: 2,
-            borderLeftWidth: 4,
-            borderLeftColor: '#059669'
-          }}>
-            <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>Sale Summary</Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text>Quantity:</Text>
-              <Text style={{ fontWeight: 'bold' }}>
-                {formData.quantity} {formData.saleType === 'per_bird' ? 'birds' : 'kg'}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-              <Text>Price per unit:</Text>
-              <Text style={{ fontWeight: 'bold' }}>${formData.price}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
-              <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Total Amount:</Text>
-              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#059669' }}>
-                ${total.toFixed(2)}
-              </Text>
-            </View>
+      <GlassCard variant="surface" contentStyle={styles.formCard}>
+        {/* Select Batch */}
+        <Text style={styles.label}>Select Flock Batch *</Text>
+        {batches.length > 0 ? (
+          <View style={styles.pillContainer}>
+            {batches.map((b) => {
+              const selected = formData.batchId === b.id.toString();
+              return (
+                <TouchableOpacity
+                  key={b.id}
+                  style={[styles.choicePill, selected && styles.choicePillSelected]}
+                  onPress={() => updateField('batchId', b.id.toString())}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons
+                    name="egg-outline"
+                    size={16}
+                    color={selected ? '#FFFFFF' : FarmTheme.colors.forest}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.choicePillText, selected && styles.choicePillTextSelected]}>
+                    {b.name} ({b.initialChicks} chicks)
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
+        ) : (
+          <Text style={styles.emptyNotice}>No active batches found. Please add a batch first.</Text>
         )}
 
-        <TouchableOpacity
-          style={{
-            backgroundColor: '#059669',
-            padding: 16,
-            borderRadius: 8,
-            alignItems: 'center',
-            marginTop: 16
-          }}
-          onPress={save}
-        >
-          <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>Record Sale</Text>
-        </TouchableOpacity>
+        {/* Client Selection */}
+        <View style={styles.clientLabelRow}>
+          <Text style={styles.label}>Buyer Client *</Text>
+          <TouchableOpacity onPress={() => router.push('/clients')}>
+            <Text style={styles.newClientLink}>+ New Client</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={formData.clientId}
+            onValueChange={(val) => updateField('clientId', val)}
+            style={styles.picker}
+          >
+            <Picker.Item label="Select Client..." value="" color={FarmTheme.colors.textMuted} />
+            {clients.map((c) => (
+              <Picker.Item
+                key={c.id}
+                label={`${c.name}${c.phone ? ` (${c.phone})` : ''}`}
+                value={c.id.toString()}
+              />
+            ))}
+          </Picker>
+        </View>
 
-        <TouchableOpacity
-          style={{
-            padding: 16,
-            alignItems: 'center',
-            marginTop: 8
-          }}
+        {/* Sale Type Pills */}
+        <Text style={[styles.label, { marginTop: 14 }]}>Pricing Model *</Text>
+        <View style={styles.typeSelector}>
+          <TouchableOpacity
+            style={[styles.typeOption, isPerBird && styles.typeOptionSelected]}
+            onPress={() => updateField('saleType', 'per_bird')}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="feather"
+              size={18}
+              color={isPerBird ? '#FFFFFF' : FarmTheme.colors.forest}
+            />
+            <Text style={[styles.typeText, isPerBird && styles.typeTextSelected]}>
+              Per Bird (Live)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.typeOption, !isPerBird && styles.typeOptionSelected]}
+            onPress={() => updateField('saleType', 'per_kg')}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="scale"
+              size={18}
+              color={!isPerBird ? '#FFFFFF' : FarmTheme.colors.forest}
+            />
+            <Text style={[styles.typeText, !isPerBird && styles.typeTextSelected]}>
+              Per Kilogram (Kg)
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Quantity & Unit Price */}
+        <View style={styles.row}>
+          <FarmInput
+            label={`Quantity (${isPerBird ? 'Birds' : 'Kg'})`}
+            placeholder={isPerBird ? 'e.g. 20' : 'e.g. 35.5'}
+            value={formData.quantity}
+            onChangeText={(val) => updateField('quantity', val)}
+            keyboardType="decimal-pad"
+            suffix={isPerBird ? 'birds' : 'kg'}
+            containerStyle={{ flex: 1, marginRight: 8 }}
+            required
+          />
+
+          <FarmInput
+            label={`Price per ${isPerBird ? 'Bird' : 'Kg'}`}
+            placeholder={isPerBird ? '8.00' : '5.50'}
+            value={formData.price}
+            onChangeText={(val) => updateField('price', val)}
+            keyboardType="decimal-pad"
+            suffix="$"
+            containerStyle={{ flex: 1 }}
+            required
+          />
+        </View>
+
+        <FarmInput
+          label="Sale Date"
+          value={formData.date}
+          onChangeText={(val) => updateField('date', val)}
+          placeholder="YYYY-MM-DD"
+          iconName="calendar-outline"
+        />
+
+        {/* Live Total Glass Card */}
+        {total > 0 && (
+          <GlassCard variant="emerald" style={styles.totalCard} contentStyle={styles.totalInner}>
+            <View style={styles.totalRow}>
+              <View>
+                <Text style={styles.totalLabel}>SALE TOTAL</Text>
+                <Text style={styles.totalSub}>
+                  {formData.quantity} {isPerBird ? 'birds' : 'kg'} × ${formData.price}
+                </Text>
+              </View>
+              <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+            </View>
+          </GlassCard>
+        )}
+
+        <FarmButton
+          title={submitting ? 'Recording Sale...' : 'Confirm Sale'}
+          variant="harvest"
+          iconName="checkmark-circle-outline"
+          onPress={save}
+          loading={submitting}
+          style={{ marginTop: 10 }}
+        />
+
+        <FarmButton
+          title="Cancel"
+          variant="glass"
           onPress={() => router.back()}
-        >
-          <Text style={{ color: '#6b7280', fontSize: 16 }}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
+          style={{ marginTop: 10 }}
+        />
+      </GlassCard>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: FarmTheme.colors.background,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  bannerCard: {
+    marginBottom: 16,
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  bannerIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  bannerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: FarmTheme.colors.goldDark,
+    marginBottom: 2,
+  },
+  bannerSubtitle: {
+    fontSize: 12,
+    color: FarmTheme.colors.earth,
+    lineHeight: 16,
+  },
+  formCard: {
+    padding: 18,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: FarmTheme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  pillContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  choicePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 83, 45, 0.06)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: FarmTheme.radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(20, 83, 45, 0.12)',
+  },
+  choicePillSelected: {
+    backgroundColor: FarmTheme.colors.forest,
+    borderColor: FarmTheme.colors.forest,
+  },
+  choicePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: FarmTheme.colors.forest,
+  },
+  choicePillTextSelected: {
+    color: '#FFFFFF',
+  },
+  emptyNotice: {
+    fontSize: 12,
+    color: FarmTheme.colors.rose,
+    marginBottom: 12,
+  },
+  clientLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  newClientLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: FarmTheme.colors.forestMedium,
+  },
+  pickerContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(20, 83, 45, 0.16)',
+    borderRadius: FarmTheme.radius.md,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  picker: {
+    height: 48,
+    color: FarmTheme.colors.textPrimary,
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  typeOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(20, 83, 45, 0.05)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(20, 83, 45, 0.15)',
+    borderRadius: FarmTheme.radius.md,
+    paddingVertical: 12,
+  },
+  typeOptionSelected: {
+    backgroundColor: FarmTheme.colors.forest,
+    borderColor: FarmTheme.colors.forest,
+  },
+  typeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: FarmTheme.colors.forest,
+  },
+  typeTextSelected: {
+    color: '#FFFFFF',
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  totalCard: {
+    marginVertical: 12,
+  },
+  totalInner: {
+    padding: 14,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: FarmTheme.colors.forest,
+    letterSpacing: 0.8,
+  },
+  totalSub: {
+    fontSize: 12,
+    color: FarmTheme.colors.textSecondary,
+    marginTop: 2,
+  },
+  totalValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: FarmTheme.colors.forestDeep,
+  },
+});
